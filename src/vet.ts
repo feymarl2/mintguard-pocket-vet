@@ -25,16 +25,16 @@ export async function vetContractBrowser(
   });
 }
 
-/** Demo contracts for the UI quick-fill buttons (verified live 2026-11-10). */
+/** Demo contracts for the UI quick-fill buttons (verified live 2026-11-10, re-verified 2026-11-18). */
 export const DEMO_CONTRACTS = [
   {
-    label: "GLOOP — BSC (contoh RISKY)",
+    label: "GLOOP — BSC (RISKY example)",
     address: "0x183CBb52B3C7BCB2433d50dE0Add99B59f4DE4fE",
     chain: "bsc",
     expected: "RISKY 70",
   },
   {
-    label: "SentinelMint v2 — Base Sepolia (contoh SAFE)",
+    label: "SentinelMint v2 — Base Sepolia (SAFE example)",
     address: "0x11f163d82ba0be90dca99113b44cf1cfa719bee2",
     chain: "base-sepolia",
     expected: "SAFE 100",
