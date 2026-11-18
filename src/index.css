@@ -104,4 +104,42 @@ header h1 { margin: 0 0 4px; font-size: 1.6rem; }
 .ai-placeholder { color: #666; font-size: 0.92rem; }
 .ai-text { white-space: pre-wrap; }
 .ai-error { color: #b91c1c; }
+.btn-secondary {
+  margin-top: 10px;
+  padding: 8px 14px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1a73e8;
+  background: #fff;
+  border: 1px solid #1a73e8;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.triage-card { border-color: #c7d2fe; background: #fbfbff; }
+.triage-card h3 { margin-top: 0; }
+.level-low { color: #15803d; }
+.level-medium { color: #b45309; }
+.level-high { color: #b91c1c; }
+.level-unknown { color: #555; }
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  z-index: 10;
+  overflow-y: auto;
+}
+.dialog {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 560px;
+  width: 100%;
+}
+.dialog h2 { margin-top: 0; }
+.dialog ol { padding-left: 20px; }
+.dialog li { margin-bottom: 10px; line-height: 1.45; }
 footer { margin-top: 20px; color: #777; font-size: 0.82rem; }
