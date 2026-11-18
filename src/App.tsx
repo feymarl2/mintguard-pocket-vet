@@ -66,6 +66,7 @@ export default function App() {
   const [elapsed, setElapsed] = useState<number | null>(null);
   const [aiText, setAiText] = useState<string | null>(null);
   const [aiSource, setAiSource] = useState<string | null>(null);
+  const [aiModel, setAiModel] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [triage, setTriage] = useState<TriagePhase>({ kind: "idle" });
@@ -92,6 +93,7 @@ export default function App() {
     setVerdict(null);
     setAiText(null);
     setAiSource(null);
+    setAiModel(null);
     setAiError(null);
     setTriage({ kind: "running", downloadProgress: null });
 
@@ -143,6 +145,7 @@ export default function App() {
       const r = await explainVerdict(verdict);
       setAiText(r.text);
       setAiSource(r.inferenceSource);
+      setAiModel(r.model);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setAiError(
@@ -270,7 +273,7 @@ export default function App() {
 
       {triage.kind === "finished" && triage.result.status === "ready" && (
         <section className="card triage-card">
-          <h3>⚡ Early signals (triage) — {triageSourceLabel(triage.result.source)}</h3>
+          <h3>⚡ Early signals (triage) — {triageSourceLabel(triage.result.source)}{triage.result.model ? ` · ${triage.result.model}` : ""}</h3>
           <p>
             Early risk level:{" "}
             <strong className={`level-${(triage.result.level ?? "UNKNOWN").toLowerCase()}`}>
@@ -451,7 +454,7 @@ export default function App() {
                   <>
                     <p className="ai-text">{aiText}</p>
                     {aiSource && (
-                      <p className="hint">Explanation ran {aiSource === "in_cloud" ? "in the cloud" : `via ${aiSource}`} (Gemini via Firebase AI Logic).</p>
+                      <p className="hint">Explanation ran {aiSource === "in_cloud" ? "in the cloud" : `via ${aiSource}`}{aiModel ? ` — model ${aiModel}` : ""} (Gemini via Firebase AI Logic).</p>
                     )}
                   </>
                 )}

@@ -17,6 +17,9 @@
 // the inference source the SDK actually reported
 // (response.inferenceSource: "on_device" | "in_cloud"), so an on-device
 // claim is never made unless the SDK says the work ran on-device.
+// When the primary cloud model fails with a capacity error, the legs try
+// the fallback chain in CLOUD_MODELS (src/ai.ts) — the UI reports the
+// cloud model that actually answered, and only for in-cloud runs.
 //
 // Honesty gates (never weakened):
 //   - Triage output is DISPLAY-ONLY. It never changes the verdict or the
@@ -44,7 +47,7 @@ import {
   InferenceMode,
   InferenceSource,
 } from "firebase/ai";
-import { aiStatus, getAiService, CLOUD_MODEL } from "./ai.js";
+import { aiStatus, getAiService, CLOUD_MODEL, generateWithFallback } from "./ai.js";
 import { SOURCIFY_BASE, sourcifyHeaders } from "./vetting/sourcify.js";
 
 /** Contract material handed to the triage model. */
@@ -76,6 +79,8 @@ export interface TriageResult {
   rawText: string | null;
   /** Wall-clock ms for the generateContent call (excludes model download). */
   elapsedMs: number | null;
+  /** Cloud model that actually answered (in-cloud runs only; null on-device/unrun). */
+  model?: string | null;
 }
 
 const MAX_SOURCE_CHARS = 6000;
@@ -181,16 +186,18 @@ function parseTriageText(text: string): { level: TriageLevel; signals: string[] 
   return { level, signals };
 }
 
-let hybridModel: ReturnType<typeof getGenerativeModel> | null = null;
+const hybridModels = new Map<string, ReturnType<typeof getGenerativeModel>>();
 
-function getHybridModel() {
-  if (!hybridModel) {
-    hybridModel = getGenerativeModel(getAiService(), {
+function getHybridModel(model: string) {
+  let m = hybridModels.get(model);
+  if (!m) {
+    m = getGenerativeModel(getAiService(), {
       mode: InferenceMode.PREFER_ON_DEVICE,
-      inCloudParams: { model: CLOUD_MODEL },
+      inCloudParams: { model },
     });
+    hybridModels.set(model, m);
   }
-  return hybridModel;
+  return m;
 }
 
 let deviceInitPromise: Promise<void> | null = null;
@@ -209,7 +216,7 @@ export function beginDeviceModelInit(
   if (!aiStatus().ready) return null;
   if (!deviceInitPromise) {
     try {
-      deviceInitPromise = getHybridModel()
+      deviceInitPromise = getHybridModel(CLOUD_MODEL)
         .initializeDeviceModel(onProgress)
         .catch(() => {
           // Init failure is not fatal: PREFER_ON_DEVICE falls back to cloud.
@@ -250,6 +257,7 @@ export async function runTriage(
       signals: [],
       rawText: null,
       elapsedMs: null,
+      model: null,
     };
   }
 
@@ -261,7 +269,10 @@ export async function runTriage(
 
   const t0 = Date.now();
   try {
-    const result = await getHybridModel().generateContent(buildTriagePrompt(material));
+    const { result, model: answeredModel } = await generateWithFallback(
+      (m) => getHybridModel(m),
+      buildTriagePrompt(material),
+    );
     const text = result.response.text();
     const reported = result.response.inferenceSource;
     const source: TriageSource =
@@ -270,6 +281,9 @@ export async function runTriage(
         : reported === InferenceSource.IN_CLOUD
           ? "in_cloud"
           : "unknown";
+    // The answering model is only meaningful for in-cloud runs: on-device
+    // the answer came from Gemini Nano, not from the cloud model config.
+    const model = source === "on_device" ? null : answeredModel;
     if (!text.trim()) {
       return {
         status: "error",
@@ -279,6 +293,7 @@ export async function runTriage(
         signals: [],
         rawText: "",
         elapsedMs: Date.now() - t0,
+        model,
       };
     }
     const { level, signals } = parseTriageText(text);
@@ -290,6 +305,7 @@ export async function runTriage(
       signals,
       rawText: text.slice(0, 1000),
       elapsedMs: Date.now() - t0,
+      model,
     };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -304,6 +320,7 @@ export async function runTriage(
       signals: [],
       rawText: null,
       elapsedMs: Date.now() - t0,
+      model: null,
     };
   }
 }

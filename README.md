@@ -14,12 +14,12 @@ Live demo: https://pocket-vet-feymarls-projects.vercel.app/
 2. **On-device triage scans first** (Firebase AI Logic hybrid inference, `PREFER_ON_DEVICE`): the contract's verified source / ABI is scanned for early risk signals — suspicious mint functions, owner-only powers, hidden fees, honeypot-like restrictions. On desktop Chrome the scan prefers the on-device model (Gemini Nano via the Chrome Prompt API), so the source never leaves the device; otherwise the cloud model runs and the panel says so. The panel labels the actual inference source reported by the SDK.
 3. **The deterministic vet runs** (Sourcify verification check → on-chain reads via public RPC → `eth_call` simulation of a mint function → scoring 0–100). This engine is the SOLE authority for the verdict and score. AI output never changes them.
 4. **You get a verdict card**: badge (SAFE / RISKY / BLOCK / NOT A MINT), score bar, facts (Sourcify status, proxy, mint price, free quota, minted/max, simulation result), findings with codes, and explorer + Sourcify links.
-5. **Optionally, Gemini explains the verdict** in plain English (Firebase AI Logic, `ONLY_IN_CLOUD`, `gemini-3.8-flash`). Display-only — it explains the engine's verdict; it does not re-decide it.
+5. **Optionally, Gemini explains the verdict** in plain English (Firebase AI Logic, `ONLY_IN_CLOUD`, primary `gemini-3.8-flash` with a capacity-error fallback chain — see below). Display-only — it explains the engine's verdict; it does not re-decide it. The panel names the model that actually answered.
 
 ## Firebase AI Logic used (concretely)
 
 - **SDK**: `firebase` 12.19.0, `firebase/ai` module. Imported AND called at runtime: `getAI()` with `GoogleAIBackend` (Gemini Developer API), `getGenerativeModel()` with `InferenceMode.PREFER_ON_DEVICE` (triage, `src/triage.ts`) and `InferenceMode.ONLY_IN_CLOUD` (explanation, `src/ai.ts`), `initializeDeviceModel()` (called from the Vet click, per the user-activation requirement), `generateContent()`, and `response.inferenceSource` for honest leg labeling.
-- **Hybrid fallback override**: both legs pass `inCloudParams: { model: "gemini-3.8-flash" }`. Without it, the SDK's hybrid fallback defaults to `gemini-2.5-flash-lite` (verified in the installed SDK source) — the override keeps the fallback on a current model.
+- **Hybrid fallback override + model fallback chain**: both legs pass `inCloudParams: { model: "gemini-3.8-flash" }` as the primary cloud model. Without it, the SDK's hybrid fallback defaults to `gemini-2.5-flash-lite` (verified in the installed SDK source). On capacity errors only (429/5xx, overload, deadline — each attempt capped at 60s), the legs try `gemini-3.5-flash-lite`, then `gemini-2.5-flash-lite` (`generateWithFallback` in `src/ai.ts`); the free tier is rate-limited per project per model, so each fallback has its own quota bucket. Config-class errors (400/403/404) fail fast and surface — they are never masked by fallback. Added 19 Nov 2026 after a live click-test showed 0/8 calls to the primary returning content (500 high-demand / 503 / 429) with Firebase wiring proven live.
 - **App Check**: `firebase/app-check` with `ReCaptchaEnterpriseProvider`, enforced for AI Logic since 2 Nov 2026. Local dev uses the debug-token flow. Debug tokens are accepted in #BuildHybridAI submissions (Rules §6).
 - **Config**: build-time env vars (`VITE_FIREBASE_*`, `VITE_APPCHECK_SITE_KEY`). No config values, keys, or secrets are committed — see `.env.example` and `DEVELOPER-GUIDE.md`.
 - **On-device scope, honestly**: Gemini Nano on web runs only in Chrome on Desktop v139+ with the Prompt API enabled. On phones, only the cloud leg runs — the app says so instead of pretending otherwise.
@@ -99,7 +99,7 @@ src/
   main.tsx / index.css
   vet.ts             browser vetting entry point + demo contracts
   firebase.ts        Firebase init from env vars + App Check (no committed config)
-  ai.ts              cloud explanation leg (ONLY_IN_CLOUD, gemini-3.8-flash)
+  ai.ts              cloud explanation leg (ONLY_IN_CLOUD, gemini-3.8-flash + fallback chain)
   triage.ts          on-device triage leg (PREFER_ON_DEVICE) + Sourcify material fetch
   vetting/           MintGuard engine (vendored, core untouched — see BASELINE.md)
     core/            engine, scoring, simulate, selectors, safety, types

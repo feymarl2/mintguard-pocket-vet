@@ -109,10 +109,14 @@ Browser (no backend)
    status, contract name, up to 40 ABI function signatures, and a source
    excerpt capped at 6,000 characters. Unverified contracts yield an
    empty excerpt and the prompt says the source cannot be inspected.
-3. `runTriage()` calls `generateContent()` on a hybrid model created as
-   `getGenerativeModel(ai, { mode: InferenceMode.PREFER_ON_DEVICE,
-   inCloudParams: { model: "gemini-3.8-flash" } })`. The SDK tries the
-   on-device model first and falls back to the cloud model.
+3. `runTriage()` calls `generateContent()` via `generateWithFallback()`
+   (`src/ai.ts`) on hybrid models created as `getGenerativeModel(ai,
+   { mode: InferenceMode.PREFER_ON_DEVICE, inCloudParams: { model } })`,
+   trying the cloud models in `CLOUD_MODELS` order (primary
+   `gemini-3.8-flash`, then `gemini-3.5-flash-lite`, then
+   `gemini-2.5-flash-lite`) on capacity errors only, 60s per attempt.
+   The SDK tries the on-device model first and falls back to the cloud
+   model.
 4. The prompt demands a strict reply format (`LEVEL: LOW|MEDIUM|HIGH`
    plus up to 4 `SIGNAL:` lines). The parser is defensive: unparsed
    replies surface as raw text, never as invented structure.
@@ -122,17 +126,22 @@ Browser (no backend)
 
 The explicit `inCloudParams` override matters: the installed SDK
 (firebase 12.19.0) defaults the hybrid cloud fallback to
-`gemini-2.5-flash-lite`. The override keeps the fallback on the current
-`gemini-3.8-flash` model in both legs.
+`gemini-2.5-flash-lite`. The override makes the primary cloud model the
+current `gemini-3.8-flash` in both legs; the fallback chain (above) only
+engages on capacity errors, and the UI names the cloud model that
+actually answered (in-cloud runs only).
 
 ### Explanation leg — `src/ai.ts` (ONLY_IN_CLOUD)
 
 `explainVerdict()` sends the engine's verdict (contract, chain, score,
-verification, price, simulation result, findings) to
-`gemini-3.8-flash` with an English prompt asking for 3–5 plain sentences
-plus a final mint / don't-mint sentence. It uses
+verification, price, simulation result, findings) to the cloud model
+chain (`gemini-3.8-flash` primary, `gemini-3.5-flash-lite`, then
+`gemini-2.5-flash-lite` on capacity errors only — see
+`generateWithFallback` in `src/ai.ts`) with an English prompt asking for
+3–5 plain sentences plus a final mint / don't-mint sentence. It uses
 `InferenceMode.ONLY_IN_CLOUD` so the explanation is identical on every
-device. The returned `inferenceSource` is shown under the explanation.
+device. The returned `inferenceSource` and answering model are shown
+under the explanation.
 
 ### What on-device supports (and what it does not)
 
